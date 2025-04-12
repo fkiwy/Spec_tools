@@ -30,14 +30,13 @@ if results:
     data, data_release = retrieve_spectrum(object_id)
 
     if data and len(data) > 0:
-        # Select template(s) for comparison (Theissen+2022)
+        # Select template(s) for comparison (Kesseli+2017)
         provider = TemplateProvider()
         template_name = "Kesseli+2017"
         templates = provider.get_Kesseli_2017_templates()
 
         # Create a WaveFlux object for comparison
         spectrum = WaveFlux(label=data_release, wavelength=data["WAVELENGTH"], flux=data["FLUX"])
-        # spectrum.trim(1.22, 1.88)  # Trim to a specific wavelength range
 
         # Create object name for plotting
         object_name = create_object_name(ra, dec, precision=2, shortform=False, prefix="J", decimal=False)
