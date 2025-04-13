@@ -34,6 +34,9 @@ for fits_file in fits_files:
         # Extract the header
         header = hdu.header
 
+        if header["DR"] != "DESI-DR1":
+            continue
+
         # Extract the table data (it is an astropy Table)
         data = hdu.data
 
@@ -56,7 +59,7 @@ for fits_file in fits_files:
 
         # Set up the SED object and compare the spectrum to the templates
         sed = SED(object_name + " vs. " + template_name, directory="results/comparison")
-        sed.compare(
+        best_match = sed.compare(
             spectrum,
             templates,
             trim_wave=True,
@@ -65,11 +68,12 @@ for fits_file in fits_files:
             add_stat_to_template_label=False,
         )
 
-        # Convert to flux lambda and plot the results
-        sed.to_flux_lambda()
-        sed.plot(
-            reference_on_top=False,
-            spec_uncertainty=False,
-            plot_format="pdf",
-            open_plot=False,
-        )
+        if best_match.statistic < 500 and best_match.label.startswith(("M", "L")):
+            # Convert to flux lambda and plot the results
+            sed.to_flux_lambda()
+            sed.plot(
+                reference_on_top=False,
+                spec_uncertainty=False,
+                plot_format="pdf",
+                open_plot=False,
+            )
