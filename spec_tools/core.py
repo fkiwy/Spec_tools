@@ -100,26 +100,62 @@ def retrieve_spectrum(
     data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
     save_spectrum=False,
     output_dir=tempfile.gettempdir(),
-) -> (QTable, str):
+) -> (fits.BinTableHDU, str):
     """
-    Retrieves the spectrum of an astronomical object from the SPARCL database.
+    Retrieves the spectrum of an astronomical object from the SPARCL database and returns the spectrum in FITS format.
 
     Parameters:
     -----------
-    object_id : str
-        The unique identifier of the astronomical object for which the spectrum is to be retrieved.
+    data : dict
+        A dictionary containing metadata about the astronomical object, including:
+        - 'sparcl_id' : str : The unique identifier for the object in the SPARCL database.
+        - 'specid' : str : The unique spectrum ID of the object.
+        - 'ra' : float : Right Ascension (RA) of the object in degrees.
+        - 'dec' : float : Declination (DEC) of the object in degrees.
+        - 'spectype' : str : The spectral type of the object.
+        - 'redshift' : float : The redshift value of the object.
+        - 'redshift_err' : float : The uncertainty in the redshift value.
+        - 'data_release' : str : The data release version (e.g., "SDSS-DR16").
+        - 'dateobs_center' : str : The observation date of the object.
+        - 'site' : str : The observing site.
+        - 'telescope' : str : The telescope used for the observation.
+        - 'instrument' : str : The instrument used to observe the object.
 
     data_releases : list, optional
-        A list of data release versions to query for the spectrum. The default list includes popular datasets:
-        "SDSS-DR16", "BOSS-DR16", "DESI-EDR", and "DESI-DR1".
+        A list of data release versions to query for the spectrum. Default is ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"].
+
+    save_spectrum : bool, optional
+        If True, the retrieved spectrum will be saved as a FITS file in the specified output directory. Default is False.
+
+    output_dir : str, optional
+        The directory where the spectrum FITS file will be saved, if `save_spectrum=True`. Default is the system's temporary directory.
 
     Returns:
     --------
-    QTable
-        A QTable containing the retrieved spectrum's wavelength and flux.
+    fits.BinTableHDU
+        A FITS Binary Table HDU (Header Data Unit) containing the spectrum's wavelength and flux data, along with a header that includes the metadata.
 
     str
-        The data release from which the spectrum was obtained. If no spectrum is found, both values will be None.
+        The data release from which the spectrum was obtained (e.g., "SDSS-DR16"). If no spectrum is found, both values will be None.
+
+    Notes:
+    ------
+    The spectrum is returned in FITS format with the following key metadata in the header:
+    - 'SPARCLID' : The SPARCL database ID.
+    - 'SPECID' : The spectrum ID.
+    - 'RA' : Right Ascension of the object.
+    - 'DEC' : Declination of the object.
+    - 'WUNIT' : Wavelength units, set to 'Angstrom'.
+    - 'FUNIT' : Flux units, set to 'erg / (s cm^2 Angstrom)'.
+    - 'FSCALE' : A scaling factor applied to the flux (1e-17).
+    - 'SPECTYPE' : The spectral type of the object.
+    - 'REDSHIFT' : The redshift of the object.
+    - 'REDSHERR' : The error in the redshift value.
+    - 'DR' : Data release version.
+    - 'DATEOBS' : The date of observation.
+    - 'SITE' : The observation site.
+    - 'TELESCOP' : The telescope used.
+    - 'INSTRUMT' : The instrument used.
     """
 
     # Instantiate the SPARCL Client to interact with the database
@@ -183,63 +219,82 @@ def retrieve_spectra(
     object_ids: iter,
     data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
     output_dir=tempfile.gettempdir(),
-) -> (QTable, str):
+) -> (list, str):
     """
-    Retrieves the spectrum of an astronomical object from the SPARCL database.
+    Retrieves the spectra of multiple astronomical objects from the SPARCL database and saves them as FITS files.
 
     Parameters:
     -----------
-    object_id : str
-        The unique identifier of the astronomical object for which the spectrum is to be retrieved.
+    object_ids : iter
+        An iterable of unique identifiers (e.g., list, tuple) for the astronomical objects whose spectra are to be retrieved.
 
     data_releases : list, optional
-        A list of data release versions to query for the spectrum. The default list includes popular datasets:
-        "SDSS-DR16", "BOSS-DR16", "DESI-EDR", and "DESI-DR1".
+        A list of data release versions to query for the spectra. Default is ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"].
+
+    output_dir : str, optional
+        The directory where the FITS files for the retrieved spectra will be saved. Default is the system's temporary directory.
 
     Returns:
     --------
-    QTable
-        A QTable containing the retrieved spectrum's wavelength and flux.
+    list
+        A list of file paths (strings) where the FITS files for each spectrum were saved.
 
     str
-        The data release from which the spectrum was obtained. If no spectrum is found, both values will be None.
+        The data release from which the spectra were obtained. If no spectra are found, both values will be None.
+
+    Notes:
+    ------
+    The spectra are returned in FITS format with the following metadata in the header:
+    - 'SPARCLID' : The SPARCL database ID.
+    - 'SPECID' : The spectrum ID.
+    - 'RA' : Right Ascension of the object.
+    - 'DEC' : Declination of the object.
+    - 'WUNIT' : Wavelength units, set to 'Angstrom'.
+    - 'FUNIT' : Flux units, set to 'erg / (s cm^2 Angstrom)'.
+    - 'FSCALE' : A scaling factor applied to the flux (1e-17).
+    - 'DR' : Data release version.
     """
 
-    # Instantiate the SPARCL Client to interact with the database
+    # Instantiate the SPARCL Client to interact with the SPARCL database
     client = SparclClient()
 
+    # Convert the input object IDs to integers
     specid_list = [int(object_id) for object_id in object_ids]
 
-    # Retrieve spectra using the SPARCL client's method for the given object ID and data releases
+    # Retrieve the spectra data from SPARCL database using the provided object IDs and data releases
     result = client.retrieve_by_specid(specid_list=specid_list, dataset_list=data_releases)
-    spectra = result.records  # Extract the records from the result object
 
-    # If no records are found, notify the user and return None
+    # Extract the records (spectra) from the query result
+    spectra = result.records
+
+    # If no spectra are found, notify the user and return None
     if len(spectra) == 0:
         print("No spectra found for object IDs:", object_ids)
         return None, None
 
+    # List to store the paths of the saved FITS files
     filenames = []
 
+    # Process each spectrum in the retrieved list
     for spectrum in spectra:
-        # Create the FITS Header
+        # Create the FITS Header for this spectrum
         header = fits.Header()
-        header["SPARCLID"] = spectrum["sparcl_id"]
-        header["SPECID"] = spectrum["specid"]
-        header["RA"] = spectrum["ra"]
-        header["DEC"] = spectrum["dec"]
-        header["WUNIT"] = "Angstrom"
-        header["FUNIT"] = "erg / (s cm^2 Angstrom)"
-        header["FSCALE"] = 1e-17
-        header["DR"] = spectrum["_dr"]
+        header["SPARCLID"] = spectrum["sparcl_id"]  # SPARCL database ID
+        header["SPECID"] = spectrum["specid"]  # Spectrum ID
+        header["RA"] = spectrum["ra"]  # Right Ascension
+        header["DEC"] = spectrum["dec"]  # Declination
+        header["WUNIT"] = "Angstrom"  # Wavelength units
+        header["FUNIT"] = "erg / (s cm^2 Angstrom)"  # Flux units
+        header["FSCALE"] = 1e-17  # Flux scaling factor
+        header["DR"] = spectrum["_dr"]  # Data release version
 
-        # Create a table with the wavelength and flux data
+        # Create the data columns for the FITS file
         columns = [
-            fits.Column(name="WAVE", format="D", array=spectrum["wavelength"]),  # 'D' for double precision (float64)
-            fits.Column(name="FLUX", format="D", array=spectrum["flux"]),  # 'D' for double precision (float64)
+            fits.Column(name="WAVE", format="D", array=spectrum["wavelength"]),  # Wavelength data (double precision)
+            fits.Column(name="FLUX", format="D", array=spectrum["flux"]),  # Flux data (double precision)
         ]
 
-        # Create the BinTableHDU with the data and header
+        # Create the BinTableHDU (Header Data Unit) containing the data and header
         hdu = fits.BinTableHDU.from_columns(columns, header=header)
 
         # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
@@ -247,12 +302,16 @@ def retrieve_spectra(
             spectrum["ra"], spectrum["dec"], precision=2, shortform=False, prefix="J", decimal=False
         )
 
-        # Create the full file path for the plot image
+        # Create the full file path for the FITS file to be saved
         output_filename = os.path.join(output_dir, object_name + "_spectrum.fits")
+
+        # Write the FITS file to the specified output directory
         hdu.writeto(output_filename, overwrite=True)
 
+        # Append the filename to the list of saved files
         filenames.append(output_filename)
 
+    # Return the list of saved FITS file paths
     return filenames
 
 
@@ -393,6 +452,7 @@ def redshift_to_velocity(z, sigma_z):
     tuple
         A tuple containing the radial velocity (in km/s) and its uncertainty (in km/s).
     """
+
     # Speed of light in km/s
     c = 3.0e5  # km/s
 
