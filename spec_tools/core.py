@@ -6,7 +6,7 @@ import subprocess
 import numpy as np
 import astropy.units as u
 from astropy.io import fits
-from astropy.table import Table, QTable
+from astropy.table import Table
 from astropy.coordinates import SkyCoord
 import matplotlib.pyplot as plt
 from sparcl.client import SparclClient
@@ -350,11 +350,9 @@ def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_fo
 
     # Extract the header
     header = hdu.header
-    # print(header)
 
     # Extract the table data (it is an astropy Table)
     data = hdu.data
-    # print(table_data)
 
     # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
     object_name = create_object_name(
