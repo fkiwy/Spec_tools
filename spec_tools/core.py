@@ -126,7 +126,7 @@ def retrieve_spectrum(
 
     # Convert wavelength to Angstroms and flux to erg/s/cm^2/Å
     wavelength = spectrum.wavelength * u.AA
-    flux = spectrum.flux * u.erg / u.s / u.cm**2 / u.AA
+    flux = spectrum.flux * 1e-17 * u.erg / u.s / u.cm**2 / u.AA
 
     # Create a QTable from the wavelength and flux arrays
     result = QTable([wavelength, flux], names=("WAVELENGTH", "FLUX"))
