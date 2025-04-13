@@ -26,7 +26,7 @@ if results:
 
     print(f"Object found at RA: {round(ra, 7)}, Dec: {round(dec, 7)}")
 
-    # Retrieve the spectrum for the object, masking bad error values to improve comparison results
+    # Retrieve the spectrum for the object
     data, data_release = retrieve_spectrum(object_id)
 
     if data and len(data) > 0:

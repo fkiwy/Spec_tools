@@ -3,6 +3,7 @@ import sys
 import tempfile
 import requests
 import subprocess
+import numpy as np
 import astropy.units as u
 from astropy.table import Table, QTable
 from astropy.coordinates import SkyCoord
@@ -33,7 +34,7 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
     --------
     Table
         An Astropy Table containing the queried objects with their properties
-        such as `sparcl_id`, `specid`, `ra`, `dec`, `redshift`, etc., along with
+        such as `sparcl_id`, `specid`, `ra`, `dec`, `spectype`, etc., along with
         the calculated separation (distance) from the input coordinates, sorted by
         the closest distance. If no objects are found, `None` is returned.
     """
@@ -43,7 +44,8 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
 
     # SQL query to fetch relevant astronomical objects from the SPARCL database
     query = f"""
-            SELECT sparcl_id, specid, ra, dec, redshift, spectype, data_release, redshift_err
+            SELECT sparcl_id, specid, ra, dec, spectype, redshift, redshift_err, data_release,
+                   dateobs_center, site, telescope, instrument
               FROM sparcl.main
              WHERE 't'=q3c_radial_query(ra, dec, {ra}, {dec}, {radius})
                AND specprimary = 1
@@ -70,12 +72,23 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
     if len(table) == 0:
         return None
 
-    # Calculate the separation (distance) between the input coordinates (ra, dec)
-    # and the coordinates of the objects returned in the query
-    table.add_column(calculate_separation(ra, dec, table["ra"], table["dec"]), name="distance")
+    # Create a SkyCoord object for the target
+    target_coord = SkyCoord(ra, dec, unit=(u.deg, u.deg), frame="icrs")
 
-    # Sort the table by the calculated separation (distance) in ascending order
-    table.sort("distance")
+    # Create a SkyCoord object for the objects in the result table
+    object_coords = SkyCoord(table["ra"], table["dec"], unit=(u.deg, u.deg), frame="icrs")
+
+    # Calculate the angular separation between the target and each object in the result table
+    separations = target_coord.separation(object_coords).value
+
+    # Convert speparations from degree to arcsec
+    sparations = (separations * u.deg).to(u.arcsec).value
+
+    # Add the separations to the result table
+    table["separation"] = np.round(sparations, 3)
+
+    # Sort the result table on separation
+    table.sort("separation")
 
     # Return the sorted table with the distance column added
     return table
@@ -122,7 +135,6 @@ def retrieve_spectrum(
 
     # Retrieve the data release associated with the spectrum
     data_release = spectrum._dr
-    print("Data release:", data_release)
 
     # Convert wavelength to Angstroms and flux to erg/s/cm^2/Å
     wavelength = spectrum.wavelength * u.AA
@@ -233,41 +245,40 @@ def plot_spectrum(data, data_release, ra, dec, output_dir=tempfile.gettempdir(),
         open_file(filename)
 
 
-def calculate_separation(target_ra, target_dec, catalog_ra, catalog_dec):
+def redshift_to_velocity(z, sigma_z):
     """
-    Calculates the angular separation between a target coordinate and a catalog of coordinates.
+    Calculate the radial velocity and its uncertainty from the redshift for stars.
 
-    Parameters:
-    -----------
-    target_ra : float
-        Right Ascension (RA) of the target in degrees.
+    This function uses the small redshift approximation to convert redshift to
+    radial velocity for stars. It also propagates the uncertainty in the redshift
+    to the radial velocity using the error propagation formula:
 
-    target_dec : float
-        Declination (DEC) of the target in degrees.
+    v_r = z * c
+    sigma_v_r = c * sigma_z
 
-    catalog_ra : array-like
-        Array or list of Right Ascensions (RA) of catalog objects in degrees.
+    Parameters
+    ----------
+    z : float
+        The redshift (dimensionless).
 
-    catalog_dec : array-like
-        Array or list of Declinations (DEC) of catalog objects in degrees.
+    sigma_z : float
+        The uncertainty in the redshift (dimensionless).
 
-    Returns:
-    --------
-    separation : `Quantity`
-        Angular separation(s) between the target and catalog coordinates in arcseconds.
+    Returns
+    -------
+    tuple
+        A tuple containing the radial velocity (in km/s) and its uncertainty (in km/s).
     """
+    # Speed of light in km/s
+    c = 3.0e5  # km/s
 
-    # Create SkyCoord object for the target coordinates
-    target_coords = SkyCoord([target_ra * u.deg], [target_dec * u.deg])
+    # Radial velocity calculation
+    v_r = z * c
 
-    # Create SkyCoord object for the catalog coordinates (this can handle multiple entries)
-    catalog_coords = SkyCoord(catalog_ra, catalog_dec, unit="deg")
+    # Uncertainty in the radial velocity
+    sigma_v_r = c * sigma_z
 
-    # Calculate the angular separation between the target and each object in the catalog
-    separation = target_coords.separation(catalog_coords)
-
-    # Return the separation in arcseconds
-    return separation.arcsec
+    return round(v_r), round(sigma_v_r)
 
 
 def create_object_name(ra, dec, precision=0, sep="", prefix=None, shortform=False, decimal=True):
