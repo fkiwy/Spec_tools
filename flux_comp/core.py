@@ -1108,37 +1108,6 @@ class WaveFlux:
         columns = [wavelength, flux, uncertainty]
         self.data = Table(columns, names=["Wavelength", "Flux", "Uncertainty"], dtype=["f", "f", "f"])
 
-    def clip(self, sigma_threshold=3):
-        """
-        Applies sigma clipping to remove outliers from the flux and uncertainty data.
-
-        This function uses sigma clipping to remove outliers from the `Flux` and `Uncertainty`
-        columns in the data. The clipping is done by replacing values that are more than a specified
-        number of standard deviations (`sigma_threshold`) away from the mean with `np.nan`.
-
-        The method calls `clip_data` on both the `Flux` and `Uncertainty` columns of the data
-        to apply this process. The `sigma_threshold` determines the sensitivity of the clipping:
-        higher values will result in fewer points being clipped.
-
-        Parameters
-        ----------
-        sigma_threshold : float, optional
-            The number of standard deviations used as the threshold for sigma clipping.
-            Data points that deviate from the mean by more than this threshold will be
-            replaced by `np.nan`. Default is 3.
-
-        Notes
-        -----
-        - The `clip_data` function is assumed to handle the process of sigma clipping and
-          replacing outliers with `np.nan`.
-        - This method modifies the `Flux` and `Uncertainty` columns in the `self.data` DataFrame or
-          equivalent data structure.
-        - The clipping is done on both the flux values (`Flux`) and their corresponding uncertainties
-          (`Uncertainty`).
-        """
-        self.data["Flux"] = clip_data(self.data["Flux"], sigma_threshold)
-        self.data["Uncertainty"] = clip_data(self.data["Uncertainty"], sigma_threshold)
-
     def split(self, wave_ranges):
         """
         Split a WaveFlux instance into multiple parts based on specified wavelength ranges.
@@ -2313,13 +2282,11 @@ def curve_model(wavelength, a, b, c):
     spectral peaks, absorption lines, or emission lines in astronomy and physics.
 
     The model is given by the equation:
-    \[
-    f(\lambda) = a \cdot \exp\left(-\frac{(\lambda - b)^2}{2c^2}\right)
-    \]
+    f(lambda) = a * exp(-(lambda - b)^2 / (2 * c^2))
     where:
-    - \(a\) is the amplitude (peak value),
-    - \(b\) is the center of the peak (mean of the Gaussian),
-    - \(c\) is the standard deviation, which controls the width of the peak.
+    - a is the amplitude (peak value),
+    - b is the center of the peak (mean of the Gaussian),
+    - c is the standard deviation, which controls the width of the peak.
 
     Parameters
     ----------
@@ -2343,8 +2310,8 @@ def curve_model(wavelength, a, b, c):
     Notes
     -----
     - This model is typically used to fit spectral peaks or profiles in data.
-    - The Gaussian function is symmetric around the center \(b\), and the width of the peak is determined by \(c\).
-    - This function can be used in fitting routines like `curve_fit` from `scipy.optimize` to estimate the parameters \(a\), \(b\), and \(c\) from data.
+    - The Gaussian function is symmetric around the center b, and the width of the peak is determined by c.
+    - This function can be used in fitting routines like `curve_fit` from `scipy.optimize` to estimate the parameters a, b, and c from data.
     """
     return a * np.exp(-((wavelength - b) ** 2) / (2 * c**2))
 
@@ -2620,15 +2587,11 @@ def parallax_to_distance(plx, e_plx):
 
     This function computes the distance (in parsecs) from the parallax (in milliarcseconds)
     using the formula:
-    \[
-    d = \frac{1000}{p}
-    \]
-    where \(d\) is the distance in parsecs and \(p\) is the parallax in milliarcseconds.
+    d = 1000 / p
+    where d is the distance in parsecs and p is the parallax in milliarcseconds.
     It also computes the uncertainty in distance using error propagation:
-    \[
-    e_d = \sqrt{\left(\frac{1000}{p^2} \cdot e_p\right)^2}
-    \]
-    where \(e_p\) is the uncertainty in the parallax.
+    e_d = sqrt((1000 / p^2 * e_p)^2)
+    where e_p is the uncertainty in the parallax.
 
     Parameters
     ----------
@@ -2656,44 +2619,6 @@ def parallax_to_distance(plx, e_plx):
     dist = 1000 / plx
     e_dist = math.sqrt(pow((1000 / plx**2) * e_plx, 2))
     return dist, e_dist
-
-
-def clip_data(data, sigma_threshold):
-    """
-    Applies sigma clipping to the provided data to remove outliers.
-
-    Sigma clipping is a statistical method that removes data points
-    that are more than a specified number of standard deviations
-    (sigma_threshold) away from the mean of the data. This method
-    iteratively identifies and rejects outliers, which are then masked
-    from the data.
-
-    Parameters
-    ----------
-    data : array-like
-        The input data to be sigma clipped. This can be a NumPy array or any
-        array-like structure (e.g., list, etc.) containing numerical values.
-
-    sigma_threshold : float
-        The threshold number of standard deviations from the mean to classify
-        a data point as an outlier. Data points that lie more than this number
-        of standard deviations from the mean are considered outliers and are
-        masked.
-
-    Returns
-    -------
-    numpy.ma.MaskedArray
-        A masked array where outliers are masked (i.e., set to `--`), and the
-        non-outlier data points remain unchanged.
-
-    Notes
-    -----
-    - The `maxiters=None` parameter ensures that the clipping process will
-      iterate until no more outliers are detected.
-    - The sigma clipping process is performed using the mean of the data to
-      compute the standard deviation.
-    """
-    return sigma_clip(data, sigma=sigma_threshold, maxiters=None)
 
 
 class TemplateProvider:

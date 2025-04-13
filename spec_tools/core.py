@@ -90,7 +90,7 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
     # Sort the result table on separation
     table.sort("separation")
 
-    # Return the sorted table with the distance column added
+    # Return the sorted table with the separation column added
     return table
 
 
