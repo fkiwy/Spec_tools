@@ -18,6 +18,7 @@ import astropy.units as u
 from astropy.io import ascii, fits
 from astropy.io.votable import parse, parse_single_table
 from astropy.table import Table
+from astropy.stats import sigma_clip
 from astropy.coordinates import SkyCoord
 from astroquery.vizier import Vizier
 from astroquery.ukidss import Ukidss
@@ -392,6 +393,7 @@ class SED:
                 tpl_wavelength = data["Wavelength"]
                 tpl_flux = data["Flux"]
 
+                # Trim reference and template data to their overlapping wavelength range
                 min_wave, max_wave = determine_overlapping_wavelength_range(tpl_wavelength, ref_wavelength)
                 tpl_wavelength, tpl_flux = trim(tpl_wavelength, tpl_flux, min_wave, max_wave)
                 _, ref_flux = trim(ref_wavelength, ref_flux, min_wave, max_wave)
@@ -722,13 +724,6 @@ class SED:
                     color = curves[-1].get_color()
                     flux_lower_bound = flux - uncertainty
                     flux_upper_bound = flux + uncertainty
-
-                    # Replace negative lower bound values by nan
-                    flux_lower_bound[flux_lower_bound < 0] = np.nan
-
-                    # Replace upper bound counterparts by nan
-                    flux_upper_bound[np.isnan(flux_lower_bound)] = np.nan
-
                     plt.fill_between(
                         wavelength,
                         flux_lower_bound + delta,
@@ -1113,30 +1108,36 @@ class WaveFlux:
         columns = [wavelength, flux, uncertainty]
         self.data = Table(columns, names=["Wavelength", "Flux", "Uncertainty"], dtype=["f", "f", "f"])
 
-    def clip(self, percentile=3):
-        # Get the flux values from the original data structure
-        flux = self.data["Flux"]
+    def clip(self, sigma_threshold=3):
+        """
+        Applies sigma clipping to remove outliers from the flux and uncertainty data.
 
-        # Set the threshold to the specified percentile
-        threshold = np.percentile(flux, percentile)
+        This function uses sigma clipping to remove outliers from the `Flux` and `Uncertainty`
+        columns in the data. The clipping is done by replacing values that are more than a specified
+        number of standard deviations (`sigma_threshold`) away from the mean with `np.nan`.
 
-        # Identify indices where values are below the threshold
-        below_threshold_indices = np.where(flux < threshold)[0]
+        The method calls `clip_data` on both the `Flux` and `Uncertainty` columns of the data
+        to apply this process. The `sigma_threshold` determines the sensitivity of the clipping:
+        higher values will result in fewer points being clipped.
 
-        # Iterate over indices and replace values below threshold
-        for idx in below_threshold_indices:
-            # Find nearest neighbors that are >= threshold
-            left_neighbor = next((flux[i] for i in range(idx, -1, -1) if flux[i] >= threshold), None)
-            right_neighbor = next((flux[i] for i in range(idx, len(flux)) if flux[i] >= threshold), None)
+        Parameters
+        ----------
+        sigma_threshold : float, optional
+            The number of standard deviations used as the threshold for sigma clipping.
+            Data points that deviate from the mean by more than this threshold will be
+            replaced by `np.nan`. Default is 3.
 
-            # Replace value with nearest neighbor if found
-            if left_neighbor is not None:
-                flux[idx] = left_neighbor
-            elif right_neighbor is not None:
-                flux[idx] = right_neighbor
-
-        # Set the modified flux values back to the original data structure
-        self.data["Flux"] = flux
+        Notes
+        -----
+        - The `clip_data` function is assumed to handle the process of sigma clipping and
+          replacing outliers with `np.nan`.
+        - This method modifies the `Flux` and `Uncertainty` columns in the `self.data` DataFrame or
+          equivalent data structure.
+        - The clipping is done on both the flux values (`Flux`) and their corresponding uncertainties
+          (`Uncertainty`).
+        """
+        self.data["Flux"] = clip_data(self.data["Flux"], sigma_threshold)
+        self.data["Uncertainty"] = clip_data(self.data["Uncertainty"], sigma_threshold)
 
     def split(self, wave_ranges):
         """
@@ -2251,6 +2252,44 @@ def determine_overlapping_wavelength_range(ref_wavelength, wavelength):
 
 
 def align_flux(wavelength, flux):
+    """
+    Normalizes the flux of a spectrum based on a fitting model.
+
+    This function aligns the flux of a spectrum by normalizing it to a model fit.
+    The model is fit to the spectrum using a Gaussian-like function to estimate
+    the scaling factor, which is then used to normalize the flux.
+
+    The fitting process assumes that the spectrum can be approximated by a
+    Gaussian-like profile and uses the `curve_fit` function from `scipy.optimize`
+    to perform the fit. The scaling factor for the flux is determined from the
+    amplitude of the fit.
+
+    Parameters
+    ----------
+    wavelength : array-like
+        The array of wavelength values (e.g., in nanometers or angstroms) corresponding
+        to the flux data.
+
+    flux : array-like
+        The array of flux values that correspond to the wavelength array. These could
+        represent spectral intensities, observed fluxes, or other similar quantities.
+
+    Returns
+    -------
+    normalized_flux : numpy.ndarray
+        The flux values normalized by the scaling factor obtained from the model fit.
+        The result is a spectrum where the peak flux is normalized to 1.
+
+    Notes
+    -----
+    - The initial guess for the fitting model is based on the maximum flux and
+      the center of the spectrum. The width of the model is assumed to be a
+      quarter of the total wavelength range.
+    - The function uses the `curve_fit` method from `scipy.optimize` to fit the model.
+    - The `curve_model` function used for fitting should be defined externally and
+      should represent the functional form of the spectral peak (e.g., a Gaussian).
+    """
+
     # Initial guesses for the parameters based on the data
     initial_guess = [np.max(flux), wavelength[np.argmax(flux)], (np.max(wavelength) - np.min(wavelength)) / 4]
 
@@ -2267,6 +2306,46 @@ def align_flux(wavelength, flux):
 
 
 def curve_model(wavelength, a, b, c):
+    """
+    Gaussian model function for fitting spectral data.
+
+    This function models a Gaussian curve, which is commonly used to represent
+    spectral peaks, absorption lines, or emission lines in astronomy and physics.
+
+    The model is given by the equation:
+    \[
+    f(\lambda) = a \cdot \exp\left(-\frac{(\lambda - b)^2}{2c^2}\right)
+    \]
+    where:
+    - \(a\) is the amplitude (peak value),
+    - \(b\) is the center of the peak (mean of the Gaussian),
+    - \(c\) is the standard deviation, which controls the width of the peak.
+
+    Parameters
+    ----------
+    wavelength : array-like
+        The independent variable, typically the wavelength values (e.g., in nanometers or angstroms).
+
+    a : float
+        The amplitude of the Gaussian function, representing the height of the peak.
+
+    b : float
+        The mean or center of the Gaussian, representing the position of the peak in the wavelength domain.
+
+    c : float
+        The standard deviation (width) of the Gaussian, which determines the spread of the peak.
+
+    Returns
+    -------
+    numpy.ndarray
+        The computed values of the Gaussian function for each wavelength, representing the model's output.
+
+    Notes
+    -----
+    - This model is typically used to fit spectral peaks or profiles in data.
+    - The Gaussian function is symmetric around the center \(b\), and the width of the peak is determined by \(c\).
+    - This function can be used in fitting routines like `curve_fit` from `scipy.optimize` to estimate the parameters \(a\), \(b\), and \(c\) from data.
+    """
     return a * np.exp(-((wavelength - b) ** 2) / (2 * c**2))
 
 
@@ -2536,9 +2615,85 @@ def calculate_separation(target_ra, target_dec, catalog_ra, catalog_dec):
 
 
 def parallax_to_distance(plx, e_plx):
+    """
+    Converts parallax to distance and calculates the corresponding uncertainty in distance.
+
+    This function computes the distance (in parsecs) from the parallax (in milliarcseconds)
+    using the formula:
+    \[
+    d = \frac{1000}{p}
+    \]
+    where \(d\) is the distance in parsecs and \(p\) is the parallax in milliarcseconds.
+    It also computes the uncertainty in distance using error propagation:
+    \[
+    e_d = \sqrt{\left(\frac{1000}{p^2} \cdot e_p\right)^2}
+    \]
+    where \(e_p\) is the uncertainty in the parallax.
+
+    Parameters
+    ----------
+    plx : float
+        The parallax in milliarcseconds (mas).
+
+    e_plx : float
+        The uncertainty in the parallax (in milliarcseconds).
+
+    Returns
+    -------
+    dist : float
+        The calculated distance in parsecs.
+
+    e_dist : float
+        The calculated uncertainty in the distance (in parsecs).
+
+    Notes
+    -----
+    - The input parallax `plx` should be given in milliarcseconds (mas), and the output
+      distance `dist` will be in parsecs.
+    - The uncertainty in distance `e_dist` is computed using standard error propagation
+      based on the parallax uncertainty `e_plx`.
+    """
     dist = 1000 / plx
     e_dist = math.sqrt(pow((1000 / plx**2) * e_plx, 2))
     return dist, e_dist
+
+
+def clip_data(data, sigma_threshold):
+    """
+    Applies sigma clipping to the provided data to remove outliers.
+
+    Sigma clipping is a statistical method that removes data points
+    that are more than a specified number of standard deviations
+    (sigma_threshold) away from the mean of the data. This method
+    iteratively identifies and rejects outliers, which are then masked
+    from the data.
+
+    Parameters
+    ----------
+    data : array-like
+        The input data to be sigma clipped. This can be a NumPy array or any
+        array-like structure (e.g., list, etc.) containing numerical values.
+
+    sigma_threshold : float
+        The threshold number of standard deviations from the mean to classify
+        a data point as an outlier. Data points that lie more than this number
+        of standard deviations from the mean are considered outliers and are
+        masked.
+
+    Returns
+    -------
+    numpy.ma.MaskedArray
+        A masked array where outliers are masked (i.e., set to `--`), and the
+        non-outlier data points remain unchanged.
+
+    Notes
+    -----
+    - The `maxiters=None` parameter ensures that the clipping process will
+      iterate until no more outliers are detected.
+    - The sigma clipping process is performed using the mean of the data to
+      compute the standard deviation.
+    """
+    return sigma_clip(data, sigma=sigma_threshold, maxiters=None)
 
 
 class TemplateProvider:
