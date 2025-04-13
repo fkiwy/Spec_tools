@@ -30,13 +30,8 @@ if len(table) > 0:
         # Print the radial velocity and its uncertainty in km/s
         print(f"Radial velocity = {v} ± {v_err} km/s")
 
-    # Extract the object's specid (unique identifier for spectra), and coordinates
-    object_id = row["specid"]
-    ra = row["ra"]
-    dec = row["dec"]
-
-    # Retrieve the spectrum data for the object using its specid (object_id)
-    data, data_release = retrieve_spectrum(object_id)
+    # Retrieve the spectrum data for the object
+    hdu = retrieve_spectrum(dict(row), save_spectrum=False)
 
     # Plot the spectrum data, passing the object coordinates (ra, dec) for labeling/plotting purposes
-    plot_spectrum(data, data_release, ra, dec)
+    plot_spectrum(hdu)

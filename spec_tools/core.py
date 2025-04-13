@@ -5,6 +5,7 @@ import requests
 import subprocess
 import numpy as np
 import astropy.units as u
+from astropy.io import fits
 from astropy.table import Table, QTable
 from astropy.coordinates import SkyCoord
 import matplotlib.pyplot as plt
@@ -95,7 +96,10 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
 
 
 def retrieve_spectrum(
-    object_id: str, data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"]
+    data: dict,
+    data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
+    save_spectrum=False,
+    output_dir=tempfile.gettempdir(),
 ) -> (QTable, str):
     """
     Retrieves the spectrum of an astronomical object from the SPARCL database.
@@ -121,6 +125,8 @@ def retrieve_spectrum(
     # Instantiate the SPARCL Client to interact with the database
     client = SparclClient()
 
+    object_id = data["specid"]
+
     # Retrieve spectra using the SPARCL client's method for the given object ID and data releases
     result = client.retrieve_by_specid(specid_list=[int(object_id)], dataset_list=data_releases)
     records = result.records  # Extract the records from the result object
@@ -133,21 +139,60 @@ def retrieve_spectrum(
     # Extract the first record (assuming only one spectrum is needed)
     spectrum = records[0]
 
-    # Retrieve the data release associated with the spectrum
-    data_release = spectrum._dr
+    data["wavelength"] = spectrum.wavelength
+    data["flux"] = spectrum.flux
 
-    # Convert wavelength to Angstroms and flux to erg/s/cm^2/Å
-    wavelength = spectrum.wavelength * u.AA
-    flux = spectrum.flux * 1e-17 * u.erg / u.s / u.cm**2 / u.AA
+    hdu = createHdu(data)
 
-    # Create a QTable from the wavelength and flux arrays
-    result = QTable([wavelength, flux], names=("WAVELENGTH", "FLUX"))
+    if save_spectrum:
+        # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
+        object_name = create_object_name(
+            data["ra"], data["dec"], precision=2, shortform=False, prefix="J", decimal=False
+        )
 
-    # Return the result table and the data release
-    return result, data_release
+        # Create the full file path for the plot image
+        output_filename = os.path.join(output_dir, object_name + "_spectrum.fits")
+        hdu.writeto(output_filename, overwrite=True)
+
+    return hdu
 
 
-def plot_spectrum(data, data_release, ra, dec, output_dir=tempfile.gettempdir(), open_plot=True, plot_format="pdf"):
+def createHdu(data):
+    # Create the FITS Header
+    header = fits.Header()
+    header["SPARCLID"] = data["sparcl_id"]
+    header["SPECID"] = data["specid"]
+    header["RA"] = data["ra"]
+    header["DEC"] = data["dec"]
+    header["WUNIT"] = "Angstrom"
+    header["FUNIT"] = "erg / (s cm^2 Angstrom)"
+    header["FSCALE"] = 1e-17
+    header["SPECTYPE"] = data["spectype"]
+    header["REDSHIFT"] = data["redshift"]
+    header["REDSHERR"] = data["redshift_err"]
+    header["DR"] = data["data_release"]
+    header["DATEOBS"] = data["dateobs_center"]
+    header["SITE"] = data["site"]
+    header["TELESCOP"] = data["telescope"]
+    header["INSTRUMT"] = data["instrument"]
+
+    # Create a table with the wavelength and flux data
+    columns = [
+        fits.Column(name="WAVE", format="D", array=data["wavelength"]),  # 'D' for double precision (float64)
+        fits.Column(name="FLUX", format="D", array=data["flux"]),  # 'D' for double precision (float64)
+    ]
+
+    # Create the BinTableHDU with the data and header
+    table_hdu = fits.BinTableHDU.from_columns(columns, header=header)
+
+    return table_hdu
+
+    # Write the data to a FITS file
+    # output_filename = "output_spectrum_with_units.fits"
+    # table_hdu.writeto(output_filename, overwrite=True)
+
+
+def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_format="pdf"):
     """
     Plots the spectrum of an astronomical object (wavelength vs. flux) and saves the plot to a specified directory.
 
@@ -180,15 +225,30 @@ def plot_spectrum(data, data_release, ra, dec, output_dir=tempfile.gettempdir(),
         The function saves the plot as a file and optionally opens it.
     """
 
+    # Extract the header
+    header = hdu.header
+    # print(header)
+
+    # Extract the table data (it is an astropy Table)
+    data = hdu.data
+    # print(table_data)
+
     # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
-    object_name = create_object_name(ra, dec, precision=2, shortform=False, prefix="J", decimal=False)
+    object_name = create_object_name(
+        header["RA"], header["DEC"], precision=2, shortform=False, prefix="J", decimal=False
+    )
 
     # Create the full file path for the plot image
-    filename = os.path.join(output_dir, object_name + "_spectrum." + plot_format)
+    output_filename = os.path.join(output_dir, object_name + "_spectrum." + plot_format)
+
+    # Convert the string to an astropy unit
+    wavelength_unit = u.Unit(header["WUNIT"])
+    flux_unit = u.Unit(header["FUNIT"])
+    flux_scale = header["FSCALE"]
 
     # Extract wavelength and flux data from the input
-    wavelength = data["WAVELENGTH"]
-    flux = data["FLUX"]
+    wavelength = data["WAVE"] * wavelength_unit
+    flux = data["FLUX"] * flux_scale * flux_unit
 
     # Define the matplotlib style settings for the plot for better aesthetics
     settings = {
@@ -218,7 +278,7 @@ def plot_spectrum(data, data_release, ra, dec, output_dir=tempfile.gettempdir(),
     plt.figure(figsize=(20, 6))
 
     # Plot the spectrum (wavelength vs flux) with some transparency and label the data release
-    plt.plot(wavelength, flux, color="k", alpha=0.5, label=data_release)
+    plt.plot(wavelength, flux, color="k", alpha=0.5, label=header["DR"])
 
     def to_latex(unit):
         return unit.to_string("latex_inline")
@@ -235,14 +295,14 @@ def plot_spectrum(data, data_release, ra, dec, output_dir=tempfile.gettempdir(),
     legend.get_frame().set_boxstyle("Square")
 
     # Save the plot as an image file (PDF or other format)
-    plt.savefig(filename, dpi=300, bbox_inches="tight", format=plot_format)
+    plt.savefig(output_filename, dpi=300, bbox_inches="tight", format=plot_format)
 
     # Close the plot to free up memory
     plt.close()
 
     # Optionally open the plot after saving (depending on the open_plot flag)
     if open_plot:
-        open_file(filename)
+        open_file(output_filename)
 
 
 def redshift_to_velocity(z, sigma_z):
