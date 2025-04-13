@@ -133,31 +133,12 @@ def retrieve_spectrum(
 
     # If no records are found, notify the user and return None
     if len(records) == 0:
-        print("No spectrum found with object ID:", object_id)
+        print("No spectrum found for object ID:", object_id)
         return None, None
 
     # Extract the first record (assuming only one spectrum is needed)
     spectrum = records[0]
 
-    data["wavelength"] = spectrum.wavelength
-    data["flux"] = spectrum.flux
-
-    hdu = createHdu(data)
-
-    if save_spectrum:
-        # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
-        object_name = create_object_name(
-            data["ra"], data["dec"], precision=2, shortform=False, prefix="J", decimal=False
-        )
-
-        # Create the full file path for the plot image
-        output_filename = os.path.join(output_dir, object_name + "_spectrum.fits")
-        hdu.writeto(output_filename, overwrite=True)
-
-    return hdu
-
-
-def createHdu(data):
     # Create the FITS Header
     header = fits.Header()
     header["SPARCLID"] = data["sparcl_id"]
@@ -178,18 +159,101 @@ def createHdu(data):
 
     # Create a table with the wavelength and flux data
     columns = [
-        fits.Column(name="WAVE", format="D", array=data["wavelength"]),  # 'D' for double precision (float64)
-        fits.Column(name="FLUX", format="D", array=data["flux"]),  # 'D' for double precision (float64)
+        fits.Column(name="WAVE", format="D", array=spectrum.wavelength),  # 'D' for double precision (float64)
+        fits.Column(name="FLUX", format="D", array=spectrum.flux),  # 'D' for double precision (float64)
     ]
 
     # Create the BinTableHDU with the data and header
-    table_hdu = fits.BinTableHDU.from_columns(columns, header=header)
+    hdu = fits.BinTableHDU.from_columns(columns, header=header)
 
-    return table_hdu
+    if save_spectrum:
+        # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
+        object_name = create_object_name(
+            data["ra"], data["dec"], precision=2, shortform=False, prefix="J", decimal=False
+        )
 
-    # Write the data to a FITS file
-    # output_filename = "output_spectrum_with_units.fits"
-    # table_hdu.writeto(output_filename, overwrite=True)
+        # Create the full file path for the plot image
+        output_filename = os.path.join(output_dir, object_name + "_spectrum.fits")
+        hdu.writeto(output_filename, overwrite=True)
+
+    return hdu
+
+
+def retrieve_spectra(
+    object_ids: iter,
+    data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
+    output_dir=tempfile.gettempdir(),
+) -> (QTable, str):
+    """
+    Retrieves the spectrum of an astronomical object from the SPARCL database.
+
+    Parameters:
+    -----------
+    object_id : str
+        The unique identifier of the astronomical object for which the spectrum is to be retrieved.
+
+    data_releases : list, optional
+        A list of data release versions to query for the spectrum. The default list includes popular datasets:
+        "SDSS-DR16", "BOSS-DR16", "DESI-EDR", and "DESI-DR1".
+
+    Returns:
+    --------
+    QTable
+        A QTable containing the retrieved spectrum's wavelength and flux.
+
+    str
+        The data release from which the spectrum was obtained. If no spectrum is found, both values will be None.
+    """
+
+    # Instantiate the SPARCL Client to interact with the database
+    client = SparclClient()
+
+    specid_list = [int(object_id) for object_id in object_ids]
+
+    # Retrieve spectra using the SPARCL client's method for the given object ID and data releases
+    result = client.retrieve_by_specid(specid_list=specid_list, dataset_list=data_releases)
+    spectra = result.records  # Extract the records from the result object
+
+    # If no records are found, notify the user and return None
+    if len(spectra) == 0:
+        print("No spectra found for object IDs:", object_ids)
+        return None, None
+
+    filenames = []
+
+    for spectrum in spectra:
+        # Create the FITS Header
+        header = fits.Header()
+        header["SPARCLID"] = spectrum["sparcl_id"]
+        header["SPECID"] = spectrum["specid"]
+        header["RA"] = spectrum["ra"]
+        header["DEC"] = spectrum["dec"]
+        header["WUNIT"] = "Angstrom"
+        header["FUNIT"] = "erg / (s cm^2 Angstrom)"
+        header["FSCALE"] = 1e-17
+        header["DR"] = spectrum["_dr"]
+
+        # Create a table with the wavelength and flux data
+        columns = [
+            fits.Column(name="WAVE", format="D", array=spectrum["wavelength"]),  # 'D' for double precision (float64)
+            fits.Column(name="FLUX", format="D", array=spectrum["flux"]),  # 'D' for double precision (float64)
+        ]
+
+        # Create the BinTableHDU with the data and header
+        hdu = fits.BinTableHDU.from_columns(columns, header=header)
+
+        # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
+        object_name = create_object_name(
+            spectrum["ra"], spectrum["dec"], precision=2, shortform=False, prefix="J", decimal=False
+        )
+
+        # Create the full file path for the plot image
+        output_filename = os.path.join(output_dir, object_name + "_spectrum.fits")
+        hdu.writeto(output_filename, overwrite=True)
+
+        filenames.append(output_filename)
+
+    return filenames
 
 
 def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_format="pdf"):
