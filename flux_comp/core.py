@@ -18,7 +18,6 @@ import astropy.units as u
 from astropy.io import ascii, fits
 from astropy.io.votable import parse, parse_single_table
 from astropy.table import Table
-from astropy.stats import sigma_clip
 from astropy.coordinates import SkyCoord
 from astroquery.vizier import Vizier
 from astroquery.ukidss import Ukidss
