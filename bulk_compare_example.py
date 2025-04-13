@@ -68,7 +68,7 @@ for fits_file in fits_files:
             add_stat_to_template_label=False,
         )
 
-        if best_match.statistic < 500 and best_match.label.startswith(("M", "L")):
+        if best_match and best_match.statistic < 500 and best_match.label.startswith(("M", "L")):
             # Convert to flux lambda and plot the results
             sed.to_flux_lambda()
             sed.plot(
