@@ -17,7 +17,7 @@ warnings.simplefilter("ignore", category=AstropyWarning)
 # Select template(s) for comparison (Kesseli+2017)
 provider = TemplateProvider()
 template_name = "Kesseli+2017"
-templates = provider.get_Kesseli_2017_templates()
+templates = provider.get_Kesseli_2017_templates(spt=("M", "L"))
 
 # Define the directory path
 directory_path = "results/spectra"
@@ -68,12 +68,13 @@ for fits_file in fits_files:
             add_stat_to_template_label=False,
         )
 
-        if best_match and best_match.statistic < 500 and best_match.label.startswith(("M", "L")):
+        if best_match and best_match.statistic < 500:
             # Convert to flux lambda and plot the results
             sed.to_flux_lambda()
             sed.plot(
                 reference_on_top=False,
                 spec_uncertainty=False,
+                figure_size=(10, 3),
                 plot_format="pdf",
                 open_plot=False,
             )

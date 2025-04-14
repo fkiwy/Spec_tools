@@ -69,6 +69,7 @@ if results:
     sed.plot(
         reference_on_top=False,
         spec_uncertainty=False,
+        figure_size=(10, 3),
         plot_format="pdf",
         open_plot=True,
     )

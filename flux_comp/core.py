@@ -2625,7 +2625,7 @@ class TemplateProvider:
     def __init__(self):
         self.module_path = os.path.dirname(inspect.getfile(inspect.currentframe()))
 
-    def get_Kesseli_2017_templates(self, wave_range=None, spt=None, smooth_window=None):
+    def get_Kesseli_2017_templates(self, wave_range=None, spt=None, smooth_window=None, print_template_info=True):
         print("Loading Kesseli+2017 templates ...")
         template_dir = join(self.module_path, "templates/Kesseli+2017/")
         template_paths = [
@@ -2636,6 +2636,8 @@ class TemplateProvider:
             template_info = self.extract_Kesseli_2017_template_info(template_path)
             if spt and not template_info.startswith(spt):
                 continue
+            if print_template_info:
+                print(template_info)
             template = fits.open(template_path)
             data = template[1].data
             wavelength = (10 ** data["LogLam"]) * u.AA
@@ -2669,7 +2671,7 @@ class TemplateProvider:
             else:
                 return ""
 
-    def get_Theissen_2022_templates(self, wave_range=None, spt=None, smooth_window=None):
+    def get_Theissen_2022_templates(self, wave_range=None, spt=None, smooth_window=None, print_template_info=True):
         print("Loading Theissen+2022 templates ...")
         template_dir = join(self.module_path, "templates/Theissen+2022/")
         template_paths = [
@@ -2680,7 +2682,8 @@ class TemplateProvider:
             template_info = self.extract_Theissen_2022_template_info(template_path)
             if spt and not template_info.startswith(spt):
                 continue
-            print(template_info)
+            if print_template_info:
+                print(template_info)
             template = fits.open(template_path)
             data = template[0].data
             wave0, flux0, unc0 = data[3][0], data[3][1], data[3][2]
@@ -2715,7 +2718,7 @@ class TemplateProvider:
         else:
             return ""
 
-    def get_Burgasser_2017_templates(self, wave_range=None, spt=None, smooth_window=None):
+    def get_Burgasser_2017_templates(self, wave_range=None, spt=None, smooth_window=None, print_template_info=True):
         print("Loading Burgasser+2017 templates ...")
         template_dir = join(self.module_path, "templates/Burgasser+2017/")
         template_paths = [
@@ -2726,7 +2729,8 @@ class TemplateProvider:
             template_info = self.extract_Burgasser_2017_template_info(template_path)
             if spt and not template_info.startswith(spt):
                 continue
-            print(template_info)
+            if print_template_info:
+                print(template_info)
             template = fits.open(template_path)
             data = template[0].data
             wavelength = data[0] * u.um
