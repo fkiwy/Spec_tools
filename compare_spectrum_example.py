@@ -9,13 +9,13 @@ warnings.simplefilter("ignore", category=AstropyWarning)
 
 
 # Define the RA and Dec coordinates of the target area (in degrees)
-ra, dec = 209.2891781, 55.7474398
+ra, dec = 47.8149931, 1.1085024
 
 # Define the search radius around the target coordinates (in arcseconds)
 radius = 5
 
 # Retrieve objects based on coordinates
-results = retrieve_objects(ra, dec, search_radius)
+results = retrieve_objects(ra, dec, radius)
 
 if results:
     result = results[0]
@@ -68,7 +68,7 @@ if results:
         reference_on_top=False,
         spec_uncertainty=False,
         figure_size=(10, 3),
-        plot_format="pdf",
+        plot_format="png",
         open_plot=True,
     )
 else:

@@ -2,7 +2,7 @@ from spec_tools.core import retrieve_objects, retrieve_spectrum, plot_spectrum, 
 
 
 # Define the RA and Dec coordinates of the target area (in degrees)
-ra, dec = 209.2891781, 55.7474398
+ra, dec = 47.8149931, 1.1085024
 
 # Define the search radius around the target coordinates (in arcseconds)
 radius = 5
@@ -34,4 +34,4 @@ if len(table) > 0:
     hdu = retrieve_spectrum(dict(row), save_spectrum=False)
 
     # Plot the spectrum data, passing the object coordinates (ra, dec) for labeling/plotting purposes
-    plot_spectrum(hdu)
+    plot_spectrum(hdu, plot_format="png")
