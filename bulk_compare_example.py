@@ -10,10 +10,6 @@ from flux_comp.core import SED, WaveFlux, TemplateProvider
 warnings.simplefilter("ignore", category=AstropyWarning)
 
 
-# ----------------------------
-# Compare spectra to templates
-# ----------------------------
-
 # Select template(s) for comparison (Kesseli+2017)
 provider = TemplateProvider()
 template_name = "Kesseli+2017"

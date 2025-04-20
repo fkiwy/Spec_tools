@@ -1,9 +1,8 @@
-# Import necessary modules from astropy
-from astropy.io import fits  # For working with FITS files
-from astropy.table import Table  # For working with tables (e.g., CSV data)
+from astropy.io import fits
+from astropy.table import Table
 
-# Import specific functions from the spec_tools.core module
-from spec_tools.core import retrieve_spectra, plot_spectrum  # For retrieving spectra and plotting them
+from spec_tools.core import retrieve_spectra, plot_spectrum
+
 
 # Read the table of objects from a CSV file into an Astropy Table
 # The 'ucsheet_x_sparcl.csv' file contains the list of object IDs whose spectra we will retrieve

@@ -8,13 +8,11 @@ from flux_comp.core import SED, WaveFlux, TemplateProvider
 warnings.simplefilter("ignore", category=AstropyWarning)
 
 
-# ------------------------------
-# Compare spectrum to templates
-# ------------------------------
-
-# Coordinates for the object of interest
+# Define the RA and Dec coordinates of the target area (in degrees)
 ra, dec = 209.2891781, 55.7474398
-search_radius = 5  # arcsec
+
+# Define the search radius around the target coordinates (in arcseconds)
+radius = 5
 
 # Retrieve objects based on coordinates
 results = retrieve_objects(ra, dec, search_radius)

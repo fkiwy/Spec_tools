@@ -1,5 +1,5 @@
-# Import necessary functions from the spec_tools.core module
 from spec_tools.core import retrieve_objects, retrieve_spectrum, plot_spectrum, redshift_to_velocity
+
 
 # Define the RA and Dec coordinates of the target area (in degrees)
 ra, dec = 209.2891781, 55.7474398
