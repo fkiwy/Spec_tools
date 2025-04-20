@@ -83,10 +83,10 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
     separations = target_coord.separation(object_coords).value
 
     # Convert speparations from degree to arcsec
-    sparations = (separations * u.deg).to(u.arcsec).value
+    separations = (separations * u.deg).to(u.arcsec).value
 
     # Add the separations to the result table
-    table["separation"] = np.round(sparations, 3)
+    table["separation"] = np.round(separations, 3)
 
     # Sort the result table on separation
     table.sort("separation")
@@ -100,7 +100,7 @@ def retrieve_spectrum(
     data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
     save_spectrum=False,
     output_dir=tempfile.gettempdir(),
-) -> (fits.BinTableHDU, str):
+) -> tuple[fits.BinTableHDU, str]:
     """
     Retrieves the spectrum of an astronomical object from the SPARCL database and returns the spectrum in FITS format.
 
@@ -219,7 +219,7 @@ def retrieve_spectra(
     object_ids: iter,
     data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
     output_dir=tempfile.gettempdir(),
-) -> (list, str):
+) -> tuple[list, str]:
     """
     Retrieves the spectra of multiple astronomical objects from the SPARCL database and saves them as FITS files.
 
@@ -321,17 +321,8 @@ def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_fo
 
     Parameters:
     -----------
-    data : `Table`
-        The data containing the spectrum with columns `WAVELENGTH` and `FLUX`.
-
-    data_release : str
-        The data release version (e.g., "SDSS-DR16") to label the plot.
-
-    ra : float
-        The right ascension of the object, used to create the plot's file name.
-
-    dec : float
-        The declination of the object, used to create the plot's file name.
+    hdu : astropy.io.fits.BinTableHDU
+        The HDU containing the spectrum data as returned by `retrieve_spectrum()`.
 
     output_dir : str, optional
         Directory where the plot will be saved. Defaults to the system's temporary directory.
