@@ -13,6 +13,7 @@ This script downloads a single spectrum for an astronomical object located at a 
 - Uses `retrieve_objects()` to find targets from SPARCL.
 - Fetches the spectrum with `retrieve_spectrum()`.
 - Saves the spectrum to a FITS file for further analysis.
+- Plots the saved spectrum.
 
 ### 2. `compare_spectrum_example.py`
 
@@ -41,66 +42,138 @@ Automates comparison of all spectra in a folder:
 - For each file:
   - Parses header and data to extract spectral flux and wavelength.
   - Compares the spectrum with template SEDs using `SED.compare()`.
-  - Saves a plot if a good match is found (e.g., `chi² < 500`).
+  - Saves a plot if a good match is found.
+
+### 5. Example plots
+
+More examples are available in the `example_plots` folder. 
+
+![Spectrum](example_plots/J031115.48+010630.96_spectrum.png)
+
+![Comparison](example_plots/J031115.48+010630.96_vs._Kesseli+2017.png)
 
 ## Core Functionality — `spec_tools/core.py`
 
-The `core.py` module is the main interface for retrieving and analyzing spectra. Below is a summary of the available functions:
+The `core.py` module is the main interface for retrieving and analyzing spectra. Below is a comprehensive description of the available functions:
 
-### `retrieve_objects(ra, dec, radius_arcsec)`
+### `retrieve_objects(ra: float, dec: float, radius: float) -> Table`
 
-Query SPARCL to find spectra near the specified RA/Dec coordinates.
+Retrieves astronomical objects from the SPARCL database within a specified radius from a given right ascension (RA) and declination (DEC). The function sends a query to the SPARCL database using ADQL (Astronomical Data Query Language) and returns the results as an Astropy Table with additional calculated separation (distance) from the input RA and DEC.
 
-- **Parameters:**
-  - `ra` (float): Right ascension in degrees.
-  - `dec` (float): Declination in degrees.
-  - `radius_arcsec` (float): Search radius in arcseconds.
+#### Parameters:
+- **ra** (`float`): Right Ascension (RA) in degrees of the central point to search around.
+- **dec** (`float`): Declination (DEC) in degrees of the central point to search around.
+- **radius** (`float`): Search radius in arcseconds to define the search area around the given RA and DEC.
 
-- **Returns:** List of result dictionaries containing metadata about nearby spectra.
+#### Returns:
+- **Table**: An Astropy Table containing the queried objects with their properties such as `sparcl_id`, `specid`, `ra`, `dec`, `spectype`, etc., along with the calculated separation (distance) from the input coordinates, sorted by the closest distance. If no objects are found, `None` is returned.
 
-### `retrieve_spectrum(row, output_dir=None, filename=None)`
+---
 
-Download a single spectrum based on a SPARCL metadata row.
+### `retrieve_spectrum(data: dict, data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"], save_spectrum=False, output_dir=tempfile.gettempdir()) -> tuple[fits.BinTableHDU, str]`
 
-- **Parameters:**
-  - `row` (dict): Metadata describing the spectrum (from `retrieve_objects`).
-  - `output_dir` (str, optional): Directory to save the spectrum.
-  - `filename` (str, optional): Custom filename (defaults to derived object name).
+Retrieves the spectrum of an astronomical object from the SPARCL database and returns the spectrum in FITS format.
 
-- **Returns:** A `BinTableHDU` object containing the spectrum.
+#### Parameters:
+- **data** (`dict`): A dictionary (output of function `retrieve_objects`) containing metadata about the astronomical object, including:
+  - `sparcl_id`: str, The unique identifier for the object in the SPARCL database.
+  - `specid`: str, The unique spectrum ID of the object.
+  - `ra`: float, Right Ascension (RA) of the object in degrees.
+  - `dec`: float, Declination (DEC) of the object in degrees.
+  - `spectype`: str, The spectral type of the object.
+  - `redshift`: float, The redshift value of the object.
+  - `redshift_err`: float, The uncertainty in the redshift value.
+  - `data_release`: str, The data release version (e.g., "SDSS-DR16").
+  - `dateobs_center`: str, The observation date of the object.
+  - `site`: str, The observing site.
+  - `telescope`: str, The telescope used for the observation.
+  - `instrument`: str, The instrument used to observe the object.
+  
+- **data_releases** (`list`, optional): A list of data release versions to query for the spectrum. Default is `["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"]`.
+- **save_spectrum** (`bool`, optional): If `True`, the retrieved spectrum will be saved as a FITS file in the specified output directory. Default is `False`.
+- **output_dir** (`str`, optional): The directory where the spectrum FITS file will be saved, if `save_spectrum=True`. Default is the system's temporary directory.
 
-### `retrieve_spectra(specids, output_dir=None)`
+#### Returns:
+- **tuple**: 
+  - `fits.BinTableHDU`: A FITS Binary Table HDU (Header Data Unit) containing the spectrum's wavelength and flux data, along with a header that includes the metadata.
+  - `str`: The data release from which the spectrum was obtained (e.g., "SDSS-DR16"). If no spectrum is found, both values will be `None`.
 
-Batch download spectra given a list of object identifiers.
+---
 
-- **Parameters:**
-  - `specids` (list[str]): List of SPARCL object IDs.
-  - `output_dir` (str, optional): Where to save the downloaded FITS files.
+### `retrieve_spectra(object_ids: iter, data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"], output_dir=tempfile.gettempdir()) -> tuple[list, str]`
 
-- **Returns:** List of filenames corresponding to the saved FITS files.
+Retrieves the spectra of multiple astronomical objects from the SPARCL database and saves them as FITS files.
 
-### `plot_spectrum(hdu, output_dir=None, open_plot=True)`
+#### Parameters:
+- **object_ids** (`iter`): An iterable of unique identifiers (e.g., list, tuple) for the astronomical objects whose spectra are to be retrieved.
+- **data_releases** (`list`, optional): A list of data release versions to query for the spectra. Default is `["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"]`.
+- **output_dir** (`str`, optional): The directory where the FITS files for the retrieved spectra will be saved. Default is the system's temporary directory.
 
-Plot a spectrum from a `BinTableHDU` and optionally save the figure.
+#### Returns:
+- **list**: A list of file paths (strings) where the FITS files for each spectrum were saved.
+- **str**: The data release from which the spectra were obtained. If no spectra are found, both values will be `None`.
 
-- **Parameters:**
-  - `hdu` (`BinTableHDU`): Spectral data container.
-  - `output_dir` (str, optional): Where to save the plot (default is no save).
-  - `open_plot` (bool): Whether to show the plot window (default: True).
+---
 
-### `create_object_name(ra, dec, precision=2, shortform=False, prefix="J", decimal=False)`
+### `plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_format="pdf")`
 
-Utility function to generate a standard astronomical name from RA and Dec.
+Plots the spectrum of an astronomical object (wavelength vs. flux) and saves the plot to a specified directory.
 
-- **Parameters:**
-  - `ra` (float): Right ascension in degrees.
-  - `dec` (float): Declination in degrees.
-  - `precision` (int): Decimal precision in coordinates.
-  - `shortform` (bool): Whether to abbreviate the name.
-  - `prefix` (str): Prefix for the name (default: 'J').
-  - `decimal` (bool): Use decimal formatting instead of HMS/DMS.
+#### Parameters:
+- **hdu** (`astropy.io.fits.BinTableHDU`): The HDU containing the spectrum data as returned by `retrieve_spectrum()`.
+- **output_dir** (`str`, optional): Directory where the plot will be saved. Defaults to the system's temporary directory.
+- **open_plot** (`bool`, optional): If `True`, the plot will be opened automatically after saving. Defaults to `True`.
+- **plot_format** (`str`, optional): The format to save the plot as (e.g., "pdf", "png"). Defaults to "pdf".
 
-- **Returns:** A string representing the formatted object name (e.g., `J1234+5678`).
+#### Returns:
+- **None**: The function saves the plot as an image file and optionally opens it.
+
+---
+
+### `redshift_to_velocity(z, sigma_z)`
+
+Calculate the radial velocity and its uncertainty from the redshift for stars.
+
+This function uses the small redshift approximation to convert redshift to radial velocity for stars. It also propagates the uncertainty in the redshift to the radial velocity using the error propagation formula.
+
+#### Parameters:
+- **z** (`float`): The redshift (dimensionless).
+- **sigma_z** (`float`): The uncertainty in the redshift (dimensionless).
+
+#### Returns:
+- **tuple**: A tuple containing the radial velocity (in km/s) and its uncertainty (in km/s).
+
+---
+
+### `create_object_name(ra, dec, precision=0, sep="", prefix=None, shortform=False, decimal=True)`
+
+Generate a string-based object name from celestial coordinates.
+
+#### Parameters:
+- **ra** (`float`): Right Ascension in degrees.
+- **dec** (`float`): Declination in degrees.
+- **precision** (`int`, optional): Number of decimal places for coordinates (default is 0).
+- **sep** (`str`, optional): Separator to use in formatted output (default is "").
+- **prefix** (`str`, optional): String to prepend to the object name.
+- **shortform** (`bool`, optional): If `True`, returns a short HMS/DMS form like '1234+5678'.
+- **decimal** (`bool`, optional): If `True`, returns decimal-formatted coordinates.
+
+#### Returns:
+- **str**: A formatted object name string.
+
+---
+
+### `open_file(filename)`
+
+Opens a file using the default application based on the operating system.
+
+#### Parameters:
+- **filename** (`str`): The path to the file to be opened.
+
+#### Behavior:
+- On Windows (`win32`), the file will be opened using the default associated application.
+- On macOS (`darwin`), the file will be opened using the `open` command.
+- On Linux and other Unix-like systems, the file will be opened using the `evince` viewer (can be changed to another viewer).
 
 ## Dependencies
 
