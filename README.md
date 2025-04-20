@@ -1,6 +1,11 @@
 # SPARCL Spectra Tools
 
+
+<img src="assets/logo.png" alt="Logo" align="left" width="100" style="margin-right:10">
+
 This repository provides a suite of Python tools to **download, inspect, and compare astronomical spectra** from the SDSS, BOSS, and DESI surveys, specifically those made accessible via the [SPARCL interface](https://astrosparcl.datalab.noirlab.edu/). These tools simplify access to spectral data and allow comparisons with empirical templates from the literature such as those from Kesseli+2017.
+
+<br/>
 
 ## Example Scripts
 
