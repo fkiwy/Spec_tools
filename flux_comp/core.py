@@ -41,10 +41,9 @@ class Bucket:
 
 class SED:
 
-    def __init__(self, target_name=None, directory=tempfile.gettempdir()):
+    def __init__(self, target_name=None):
         warnings.simplefilter("ignore", category=Warning)
         self.target_name = target_name
-        self.directory = directory
         self.flux_unit = u.Jy
         self.data = []
         self.results = []
@@ -499,6 +498,7 @@ class SED:
         line_width=1.0,
         open_plot=True,
         plot_format="png",
+        output_dir=tempfile.gettempdir(),
         offset=0,
         distinct_colors=None,
         colors=None,
@@ -556,6 +556,9 @@ class SED:
 
         plot_format : str, optional, default="png"
             The format of the saved plot file. Common options are "png", "jpg", or "pdf".
+
+        output_dir : str, optional, default="tempfile.gettempdir()"
+            Directory where the plot will be saved (default: system temp directory).
 
         offset : float, optional, default=0
             The vertical offset between the curves in the plot.
@@ -921,7 +924,7 @@ class SED:
         # Save and open the plot
         target_name = self.target_name if self.target_name else "SED"
         target_name = target_name.replace(" ", "_")
-        filename = join(self.directory, target_name + "." + plot_format)
+        filename = join(output_dir, target_name + "." + plot_format)
         plt.savefig(filename, dpi=300, bbox_inches="tight", format=plot_format)
         plt.close()
 
