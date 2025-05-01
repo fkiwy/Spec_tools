@@ -18,28 +18,28 @@ def download_html(ra, dec, radius, database):
     Returns:
         str: HTML content if the download is successful, None otherwise.
     """
-    base_url = 'http://wsa.roe.ac.uk:8080/wsa/WSASQL'
+    base_url = "http://wsa.roe.ac.uk:8080/wsa/WSASQL"
     params = {
-        'database': database,
-        'programmeID': 107,
-        'from': 'source',
-        'formaction': 'region',
-        'ra': ra,
-        'dec': dec,
-        'sys': 'J',
-        'radius': radius/60,
-        'xSize': '',
-        'ySize': '',
-        'boxAlignment': 'RADec',
-        'format': 'FITS',
-        'select': 'default',
-        'where': ''
+        "database": database,
+        "programmeID": 107,
+        "from": "source",
+        "formaction": "region",
+        "ra": ra,
+        "dec": dec,
+        "sys": "J",
+        "radius": radius / 60,
+        "xSize": "",
+        "ySize": "",
+        "boxAlignment": "RADec",
+        "format": "FITS",
+        "select": "default",
+        "where": "",
     }
     response = requests.get(base_url, params=params)
     if response.status_code == 200:
         return response.text
     else:
-        print(f'Failed to download HTML. Status code: {response.status_code}')
+        print(f"Failed to download HTML. Status code: {response.status_code}")
         print(response.text)
         return None
 
@@ -54,10 +54,10 @@ def extract_fits_url(html_content):
     Returns:
         str: FITS file URL if found, None otherwise.
     """
-    soup = BeautifulSoup(html_content, 'html.parser')
-    download_link = soup.find('a', class_='dl')
+    soup = BeautifulSoup(html_content, "html.parser")
+    download_link = soup.find("a", class_="dl")
     if download_link:
-        return download_link['href']
+        return download_link["href"]
     else:
         return None
 
@@ -81,7 +81,7 @@ def download_fits_file(fits_url):
             flattened_table = TableColumns()
             for col_name in table.colnames:
                 if table[col_name].ndim > 1:
-                    flattened_columns = [f'{col_name}' for i in range(table[col_name].shape[1])]
+                    flattened_columns = [f"{col_name}" for i in range(table[col_name].shape[1])]
                     for i, flattened_col_name in enumerate(flattened_columns):
                         flattened_table[flattened_col_name] = table[col_name][:, i]
                 else:
@@ -95,7 +95,7 @@ def download_fits_file(fits_url):
         return None
 
 
-def query_region(ra, dec, radius=5, database='UHSDR2'):
+def query_region(ra, dec, radius=5, database="UHSDR2"):
     """
     Queries the WSA database for a specific region and returns the results as an Astropy table.
 
@@ -115,5 +115,5 @@ def query_region(ra, dec, radius=5, database='UHSDR2'):
         if fits_url:
             table = download_fits_file(fits_url)
             if table:
-                table.sort('DISTANCE')
+                table.sort("DISTANCE")
     return table
