@@ -10,6 +10,8 @@ from astropy.table import Table
 from astropy.coordinates import SkyCoord
 import matplotlib.pyplot as plt
 from sparcl.client import SparclClient
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
@@ -63,14 +65,18 @@ def retrieve_objects(ra: float, dec: float, radius: float) -> Table:
     # Define the URL endpoint for the query execution
     query_url = "https://datalab.noirlab.edu/tap/sync"
 
-    # Send the GET request to the server to execute the query
-    response = requests.get(query_url, params=payload, timeout=300)
-
-    # Read the response into an Astropy Table from CSV format
-    table = Table.read(response.text, format="csv")
+    with requests.Session() as session:
+        retry = Retry(connect=10, backoff_factor=0.5)
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        # Send the GET request to the server to execute the query
+        response = session.get(query_url, params=payload, timeout=None)
+        # Read the response into an Astropy Table from CSV format
+        table = Table.read(response.text, format="csv")
 
     # If no objects were returned, return None
-    if len(table) == 0:
+    if table is None or len(table) == 0:
         return None
 
     # Create a SkyCoord object for the target
@@ -315,7 +321,7 @@ def retrieve_spectra(
     return filenames
 
 
-def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_format="pdf"):
+def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), file_name=None, open_plot=True, plot_format="pdf"):
     """
     Plots the spectrum of an astronomical object (wavelength vs. flux) and saves the plot to a specified directory.
 
@@ -346,12 +352,15 @@ def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), open_plot=True, plot_fo
     data = hdu.data
 
     # Generate a unique object name using RA and DEC, formatted as 'J{ra}{dec}' with 2 decimal precision
-    object_name = create_object_name(
-        header["RA"], header["DEC"], precision=2, shortform=False, prefix="J", decimal=False
-    )
+    if file_name:
+        object_name = file_name
+    else:
+        object_name = create_object_name(
+            header["RA"], header["DEC"], precision=2, shortform=False, prefix="J", decimal=False
+        )
 
     # Create the full file path for the plot image
-    output_filename = os.path.join(output_dir, object_name + "_spectrum." + plot_format)
+    output_filename = os.path.join(output_dir, object_name + "." + plot_format)
 
     # Convert the string to an astropy unit
     wavelength_unit = u.Unit(header["WUNIT"])
