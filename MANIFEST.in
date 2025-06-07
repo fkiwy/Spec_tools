@@ -1,0 +1,3 @@
+include flux_comp/templates/Burgasser+2017/*.fits
+include flux_comp/templates/Kesseli+2017/*.fits
+include flux_comp/templates/Theissen+2022/*.fits
