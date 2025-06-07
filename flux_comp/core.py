@@ -1,34 +1,35 @@
-import re
-import os
-import sys
-import math
-import json
-import time
 import inspect
-import warnings
-import tempfile
-import requests
 import itertools
-import subprocess
+import json
+import math
 import multiprocessing
-import numpy as np
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import warnings
 from io import BytesIO
 from os.path import isfile, join
+
 import astropy.units as u
+import matplotlib.pyplot as plt
+import numpy as np
+import requests
+from astropy.coordinates import SkyCoord
 from astropy.io import ascii, fits
 from astropy.io.votable import parse, parse_single_table
 from astropy.table import Table
-from astropy.coordinates import SkyCoord
-from astroquery.vizier import Vizier
-from astroquery.ukidss import Ukidss
-from astroquery.vsa import Vsa
+from astropy.units import Quantity
 from astroquery.sdss import SDSS
-from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
+from astroquery.ukidss import Ukidss
+from astroquery.vizier import Vizier
+from astroquery.vsa import Vsa
 from matplotlib.ticker import FormatStrFormatter, ScalarFormatter
+from scipy.optimize import curve_fit
 
 import flux_comp.uhs as uhs
-
 
 SVO_URL = "http://svo2.cab.inta-csic.es/theory/fps3/fps.php"
 
@@ -379,6 +380,7 @@ class SED:
                 # Normalize the template flux to the reference flux
                 if normalize:
                     template.normalize(reference)
+                    template.shift(reference)
 
                 # Extract the reference data
                 data = reference.data
@@ -473,7 +475,7 @@ class SED:
             if np.isnan(ref_uncertainty).all():
                 ref_uncertainty[:] = np.nanmedian(ref_flux) * 0.1  # Default uncertainty
             dof = np.count_nonzero(~np.isnan(ref_flux)) - 1  # Degrees of freedom
-            return np.sum((ref_flux - tpl_flux) ** 2 / ref_uncertainty**2) / dof  # Reduced chi-square
+            return np.sum((ref_flux - tpl_flux) ** 2 / ref_uncertainty ** 2) / dof  # Reduced chi-square
         else:
             raise Exception(f"No such metric: {metric}")
 
@@ -518,6 +520,7 @@ class SED:
         label_aside_curve=False,
         label_position="left",
         additional_legend_text=None,
+        detect_gaps=True,
     ):
         """
         Plots the spectral energy distribution (SED) of the waveflux data, with various customization options
@@ -621,6 +624,11 @@ class SED:
         additional_legend_text : tuple of (int, str), optional, default=None
             Adds additional text to the legend at the specified index.
 
+        detect_gaps : bool, optional, default=True
+            Enable automatic detection of gaps in the spectrum based on wavelength differences.
+            Gaps are identified where the difference between adjacent wavelengths exceeds a statistical threshold,
+            and the plot will break the line at those points.
+
         Returns:
         --------
         None
@@ -672,7 +680,7 @@ class SED:
             if relative_flux:
                 if is_reference:
                     exp = self.get_exponent(np.nanmean(flux))
-                    scale = 10**exp
+                    scale = 10 ** exp
                 flux = (flux / scale) + 1
                 ratio = np.nanmean(flux) / np.nanmean(data["Flux"])
                 uncertainty = ratio * uncertainty
@@ -721,6 +729,31 @@ class SED:
                         zorder=zorder,
                     )
             else:
+                if detect_gaps:
+                    # Calculate the differences between adjacent wavelengths
+                    wavelength_diff = np.diff(wavelength)
+
+                    # Calculate the mean and standard deviation of the wavelength differences
+                    mean_diff = np.mean(wavelength_diff)
+                    std_diff = np.std(wavelength_diff)
+
+                    # Define a threshold as the mean difference plus 2 times the standard deviation
+                    threshold = mean_diff + 2 * std_diff
+
+                    # Print the threshold
+                    # print(f"Calculated threshold for detecting gaps: {threshold}")
+
+                    # Detect indices where the wavelength difference exceeds the threshold
+                    gap_indices = np.where(wavelength_diff > threshold)[0] + 1  # Adjust indices
+
+                    # Print gap positions
+                    # print(f"Indices of gaps: {gap_indices}")
+                    # print(f"Gap starts at wavelengths: {wavelength[gap_indices - 1]}")
+                    # print(f"Gap ends at wavelengths: {wavelength[gap_indices]}")
+
+                    for idx in gap_indices:
+                        flux[idx] = np.nan  # Insert NaN values to create gaps
+
                 curves = plt.plot(wavelength, flux + delta, lw=line_width, label=label, zorder=zorder)
                 if spec_uncertainty:
                     color = curves[-1].get_color()
@@ -877,7 +910,7 @@ class SED:
 
             mean_flux = np.nanmean(ref_flux)
             exp = self.get_exponent(mean_flux)
-            flux_offset = 10**exp
+            flux_offset = 10 ** exp
             for index, item in enumerate(feature_flux_values[1:], 1):
                 prev_item = feature_flux_values[index - 1]
                 delta = abs(prev_item - item)
@@ -885,7 +918,7 @@ class SED:
                     feature_flux_values[index] = item + flux_offset
 
             # Plot lines for spectral features at the highest flux values
-            y_offset = 10**exp
+            y_offset = 10 ** exp
             for i, feature in enumerate(features_matching_range):
                 feature_label, feature_type, wavelengths = feature["label"], feature["type"], feature["wavelengths"]
                 offset = feature["offset"] if "offset" in feature else 1
@@ -942,7 +975,7 @@ class SED:
                 waveflux.normalize_at_wavelength(normalize_at_wavelength)
             if subtract_continuum:
                 waveflux.subtract_continuum(subtract_continuum)
-            self.flux_unit = u.erg / u.s / u.cm**2 / density_unit
+            self.flux_unit = u.erg / u.s / u.cm ** 2 / density_unit
 
     def get_reference(self):
         return self.data[0]
@@ -967,7 +1000,6 @@ class SED:
 
 
 class WaveFlux:
-
     VSA_BASE_URL = "http://vsa.roe.ac.uk:8080/vdfs/"
 
     def __init__(self, label="", wavelength=None, flux=None, uncertainty=None, spectrum=None, model_params=None):
@@ -1018,6 +1050,14 @@ class WaveFlux:
         Vsa.REGION_URL = self.VSA_BASE_URL + "WSASQL"
 
         if wavelength is not None and flux is not None:
+            # Check if input data is of type astropy.units.Quantity
+            if not isinstance(wavelength, Quantity):
+                raise Exception("Wavelength must be of type astropy.units.Quantity")
+            if not isinstance(flux, Quantity):
+                raise Exception("Flux must be of type astropy.units.Quantity")
+            if uncertainty is not None and not isinstance(wavelength, Quantity):
+                raise Exception("Uncertainty must be of type astropy.units.Quantity")
+
             # Convert flux and uncertainty to Jansky
             flux = flux.to(u.Jy, equivalencies=u.spectral_density(wavelength))
             if uncertainty is None:
@@ -2091,7 +2131,7 @@ def flux_to_flux_lambda(wavelength, flux, density_unit):
     Returns:
     astropy.units.quantity.Quantity: The flux density per unit wavelength in erg/s/cm^2/Ångstrom.
     """
-    return flux.to(u.erg / u.s / u.cm**2 / density_unit, equivalencies=u.spectral_density(wavelength))
+    return flux.to(u.erg / u.s / u.cm ** 2 / density_unit, equivalencies=u.spectral_density(wavelength))
 
 
 def magnitude_to_flux_lambda(zeropoint, wavelength, magnitude, density_unit=u.AA):
@@ -2315,7 +2355,7 @@ def curve_model(wavelength, a, b, c):
     - The Gaussian function is symmetric around the center b, and the width of the peak is determined by c.
     - This function can be used in fitting routines like `curve_fit` from `scipy.optimize` to estimate the parameters a, b, and c from data.
     """
-    return a * np.exp(-((wavelength - b) ** 2) / (2 * c**2))
+    return a * np.exp(-((wavelength - b) ** 2) / (2 * c ** 2))
 
 
 def merge(parts):
@@ -2361,8 +2401,8 @@ def trim(wavelength, flux, min_wave, max_wave):
     index_2 = np.nanargmin(np.abs(wavelength - max_wave))
     index_min = min(index_1, index_2)
     index_max = max(index_1, index_2)
-    wave_slice = wavelength[index_min : index_max + 1]
-    flux_slice = flux[index_min : index_max + 1]
+    wave_slice = wavelength[index_min: index_max + 1]
+    flux_slice = flux[index_min: index_max + 1]
     return wave_slice, flux_slice
 
 
@@ -2404,7 +2444,7 @@ def normalize(ref_wavelength, ref_flux, wavelength, flux, uncertainty):
     this_wave, this_flux = trim(wavelength, flux, min_wave, max_wave)
     other_wave, other_flux = trim(ref_wavelength, ref_flux, min_wave, max_wave)
     interp_flux = np.interp(other_wave, this_wave, this_flux)
-    ratio = np.nanmean(other_flux) / np.nanmean(interp_flux)
+    ratio = abs(np.nanmean(other_flux) / np.nanmean(interp_flux))
     flux *= ratio
     uncertainty *= ratio
     return flux, uncertainty
@@ -2619,7 +2659,7 @@ def parallax_to_distance(plx, e_plx):
       based on the parallax uncertainty `e_plx`.
     """
     dist = 1000 / plx
-    e_dist = math.sqrt(pow((1000 / plx**2) * e_plx, 2))
+    e_dist = math.sqrt(pow((1000 / plx ** 2) * e_plx, 2))
     return dist, e_dist
 
 
@@ -2644,8 +2684,8 @@ class TemplateProvider:
             template = fits.open(template_path)
             data = template[1].data
             wavelength = (10 ** data["LogLam"]) * u.AA
-            flux = data["Flux"] * u.erg / u.s / u.cm**2 / u.AA
-            uncertainty = data["PropErr"] * u.erg / u.s / u.cm**2 / u.AA
+            flux = data["Flux"] * u.erg / u.s / u.cm ** 2 / u.AA
+            uncertainty = data["PropErr"] * u.erg / u.s / u.cm ** 2 / u.AA
             wf = WaveFlux(template_info, wavelength, flux, uncertainty)
             if wave_range:
                 wf.trim(wave_range[0], wave_range[1])
