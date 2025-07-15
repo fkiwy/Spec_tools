@@ -254,8 +254,17 @@ class SED:
             The number of photometric bands to omit during the comparison (applies if reference has photometric data).
 
         metric : str, optional, default="reduced-chi2"
-            The metric used to compare the reference flux with the template flux. Options include "reduced-chi2",
-            "chi2", and "delta".
+            The metric to use for comparison. Options include:
+            - "reduced-chi2" : Computes the reduced chi-squared statistic, which is a measure of the goodness-of-fit
+              between the reference and template flux, accounting for uncertainties.
+            - "cosine-similarity" : Measures the cosine of the angle between the reference and template flux vectors.
+              This value ranges from -1 (completely opposite) to 1 (completely aligned). A value of 0 indicates orthogonality.
+            - "mahalanobis-distance" : Computes the Mahalanobis distance, which takes into account the correlation of
+              the data and normalizes for the variance in the reference flux uncertainties.
+            - "euclidean-distance" : Measures the straight-line (Euclidean) distance between the reference and template flux
+              vectors, considering them as points in a multi-dimensional space.
+            - "mean-absolute-error" : Computes the mean of the absolute differences between the reference and template flux values.
+            - "mean-squared-error" : Computes the mean of the squared differences between the reference and template flux values.
 
         trim_wave : bool, optional, default=False
             If True, trims the reference and template flux data to the overlapping wavelength range.
@@ -410,7 +419,7 @@ class SED:
                 if verbose:
                     print(f"Compared {reference.label} with {template.label}, statistic = {statistic:e}")
 
-        results.sort(key=lambda x: x[0])
+        results.sort(key=lambda x: x[0], reverse=True if metric == "cosine-similarity" else False)
         self.results = results
         best_match = None
         number_of_results = 0
@@ -431,17 +440,27 @@ class SED:
             template = result[2]
             template.statistic = statistic
             if add_stat_to_template_label:
-                if metric == "delta":
-                    stat_symbol = r"$\overline{\delta}$"
-                    # stat_value = '{:.3e}'.format(statistic)
-                    stat_value = self.as_si(statistic, 3)
-                elif metric == "chi2":
-                    stat_symbol = r"$\chi^{2}$"
-                    # stat_value = '{:.3e}'.format(statistic)
-                    stat_value = self.as_si(statistic, 3)
-                elif metric == "reduced-chi2":
+                if metric == "reduced-chi2":
                     stat_symbol = r"$\chi_{\nu}^{2}$"
                     stat_value = "{:.3f}".format(statistic)
+                elif metric == "cosine-similarity":
+                    stat_symbol = r"$\cos(\theta)$"
+                    stat_value = "{:.3f}".format(statistic)
+                elif metric == "mahalanobis-distance":
+                    stat_symbol = r"$d_{M}$"
+                    stat_value = "{:.3f}".format(statistic)
+                elif metric == "euclidean-distance":
+                    stat_symbol = r"$d_{E}$"
+                    stat_value = self.as_si(statistic, 3)
+                elif metric == "mean-absolute-error":
+                    stat_symbol = r"$\overline{\text{MAE}}$"
+                    stat_value = self.as_si(statistic, 3)
+                elif metric == "mean-squared-error":
+                    stat_symbol = r"$\overline{\text{MSE}}$"
+                    stat_value = self.as_si(statistic, 3)
+                else:
+                    raise Exception(f"No such metric: {metric}")
+
                 template.label = f"{template.label}\n{stat_symbol} = {stat_value}"
             self.add(template)
             if verbose:
@@ -467,17 +486,49 @@ class SED:
         return r"{m:s}$\times 10^{{{e:d}}}$".format(m=m, e=int(e))
 
     def compare_fluxes(self, ref_flux, ref_uncertainty, tpl_flux, metric):
-        if metric == "delta":
-            return np.nanmean((ref_flux - tpl_flux) ** 2)
-        elif metric == "chi2":
-            return np.sum((ref_flux - tpl_flux) ** 2 / tpl_flux)
-        elif metric == "reduced-chi2":
+        # Reduced Chi-squared metric
+        if metric == "reduced-chi2":
             if np.isnan(ref_uncertainty).all():
-                ref_uncertainty[:] = np.nanmedian(ref_flux) * 0.1  # Default uncertainty
-            dof = np.count_nonzero(~np.isnan(ref_flux)) - 1  # Degrees of freedom
-            return np.sum((ref_flux - tpl_flux) ** 2 / ref_uncertainty ** 2) / dof  # Reduced chi-square
+                ref_uncertainty[:] = np.nanmedian(ref_flux) * 0.2  # Default uncertainty if missing
+            dof = np.count_nonzero(~np.isnan(ref_flux)) - 1
+            return np.sum((ref_flux - tpl_flux) ** 2 / ref_uncertainty ** 2) / dof
+
+        # Cosine Similarity metric
+        elif metric == "cosine-similarity":
+            return self.cosine_similarity(ref_flux, tpl_flux)
+
+        # Mahalanobis Distance metric
+        elif metric == "mahalanobis-distance":
+            ivar = 1.0 / (ref_uncertainty ** 2)
+            diff = ref_flux - tpl_flux
+            d_squared = np.sum((diff ** 2) * ivar)
+            return np.sqrt(d_squared)
+
+        # Euclidean Distance metric
+        elif metric == "euclidean-distance":
+            return np.sqrt(np.sum((ref_flux - tpl_flux) ** 2))
+
+        # Mean Absolute Error metric
+        elif metric == "mean-absolute-error":
+            return np.nanmean(np.abs(ref_flux - tpl_flux))
+
+        # Mean Squared Error metric
+        elif metric == "mean-squared-error":
+            return np.nanmean((ref_flux - tpl_flux) ** 2)
+
+        # If an unsupported metric is provided, raise an error
         else:
             raise Exception(f"No such metric: {metric}")
+
+    def cosine_similarity(self, ref_flux, tpl_flux):
+        # Compute the cosine similarity, accounting for potential zero vectors
+        norm_ref = np.linalg.norm(ref_flux)
+        norm_tpl = np.linalg.norm(tpl_flux)
+
+        if norm_ref == 0 or norm_tpl == 0:
+            return 0  # If either vector is zero, return similarity of 0
+
+        return np.dot(ref_flux, tpl_flux) / (norm_ref * norm_tpl)
 
     def calculate_combinations(self, data, number_of_bands_to_omit):
         all_combinations = []
@@ -1055,7 +1106,7 @@ class WaveFlux:
                 raise Exception("Wavelength must be of type astropy.units.Quantity")
             if not isinstance(flux, Quantity):
                 raise Exception("Flux must be of type astropy.units.Quantity")
-            if uncertainty is not None and not isinstance(wavelength, Quantity):
+            if uncertainty is not None and not isinstance(uncertainty, Quantity):
                 raise Exception("Uncertainty must be of type astropy.units.Quantity")
 
             # Convert flux and uncertainty to Jansky
@@ -1150,6 +1201,63 @@ class WaveFlux:
         columns = [wavelength, flux, uncertainty]
         self.data = Table(columns, names=["Wavelength", "Flux", "Uncertainty"], dtype=["f", "f", "f"])
 
+    def signal_to_noise(self):
+        """
+        Calculate the signal-to-noise ratio (SNR) for the flux data in the WaveFlux instance.
+
+        This method computes the SNR by dividing the mean flux by the mean uncertainty.
+        It returns the SNR value, which is a measure of the quality of the spectral data.
+
+        Returns:
+        float: The calculated signal-to-noise ratio (SNR).
+        """
+        flux = self.data["Flux"]
+        uncertainty = self.data["Uncertainty"]
+        if np.isnan(flux).all() or np.isnan(uncertainty).all():
+            return np.nan
+        return np.nanmean(abs(flux)) / np.nanmean(abs(uncertainty))
+
+    def mask_zeros(self, mask_first_n_values=0, mask_last_n_values=0):
+        """
+        Mask the zero values in the flux and uncertainty data within the WaveFlux instance.
+
+        This method masks the zero values in the flux and uncertainty data within the current
+        WaveFlux instance. It updates the instance with the masked data, replacing zero values
+        with NaN.
+
+        Parameters:
+        mask_first_n_values (int): Optionally, this can be used to mask the first N values in the flux and uncertainty arrays.
+        mask_last_n_values (int): Optionally, this can be used to mask the last N values in the flux and uncertainty arrays.
+
+        Returns:
+        tuple: A tuple containing the total count of flux values and the count of valid (non-NaN) flux values.
+        """
+        wavelength = self.data["Wavelength"]
+        flux = self.data["Flux"]
+        uncertainty = self.data["Uncertainty"]
+
+        # Identify zero values
+        mask = flux == 0
+
+        # If mask_first_n_values or mask_last_n_values are specified, mask the first and last N values
+        if mask_first_n_values > 0:
+            mask[:mask_first_n_values] = True
+        if mask_last_n_values > 0:
+            mask[-mask_last_n_values:] = True
+
+        total_count = flux.size
+
+        # Replace zero values with NaN
+        wavelength[mask] = np.nan
+        flux[mask] = np.nan
+        uncertainty[mask] = np.nan
+
+        valid_count = np.sum(~np.isnan(flux))
+
+        self.create_table(wavelength, flux, uncertainty)
+
+        return total_count, valid_count
+
     def split(self, wave_ranges):
         """
         Split a WaveFlux instance into multiple parts based on specified wavelength ranges.
@@ -1172,6 +1280,28 @@ class WaveFlux:
         return parts
 
     def align_flux(self):
+        """
+        Aligns the flux of a spectrum by normalizing it to a model fit.
+
+        This method normalizes the flux of a spectrum using a Gaussian-like model.
+        It fits the model to the spectrum to estimate a scaling factor, which is
+        then used to normalize the flux values.
+
+        The fitting process assumes that the spectrum can be approximated by a
+        Gaussian-like profile and uses the `curve_fit` function from `scipy.optimize`
+        to perform the fit. The scaling factor is determined from the amplitude of
+        the fit.
+
+        Parameters:
+        -----------
+        None
+
+        Returns:
+        --------
+        None
+            The method modifies the `Flux` column of the `data` attribute in place,
+            normalizing it based on the calculated scaling factor.
+        """
         wavelength = np.array(self.data["Wavelength"])
         flux = np.array(self.data["Flux"])
         self.data["Flux"] = align_flux(wavelength, flux)
@@ -1223,9 +1353,11 @@ class WaveFlux:
             min_wave = np.nanmin(wavelength)
         if max_wave is None:
             max_wave = np.nanmax(wavelength)
-        wavelength, flux = trim(wavelength, self.data["Flux"], min_wave, max_wave)
-        _, uncertainty = trim(wavelength, self.data["Uncertainty"], min_wave, max_wave)
-        self.create_table(wavelength, flux, uncertainty)
+        trimmed_wave, trimmed_flux = trim(
+            wavelength, self.data["Flux"], min_wave, max_wave
+        )
+        _, trimmed_unc = trim(wavelength, self.data["Uncertainty"], min_wave, max_wave)
+        self.create_table(trimmed_wave, trimmed_flux, trimmed_unc)
 
     def smooth(self, width):
         """
