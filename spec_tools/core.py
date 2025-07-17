@@ -214,7 +214,7 @@ def retrieve_spectrum(
             data["ra"], data["dec"], precision=2, shortform=False, prefix="J", decimal=False
         )
 
-        # Create the full file path for the plot image
+        # Create the full file path for the FITS file to be saved
         output_filename = os.path.join(output_dir, object_name + "_spectrum.fits")
         hdu.writeto(output_filename, overwrite=True)
 
@@ -225,7 +225,7 @@ def retrieve_spectra(
     object_ids: iter,
     data_releases: list = ["SDSS-DR16", "BOSS-DR16", "DESI-EDR", "DESI-DR1"],
     output_dir=tempfile.gettempdir(),
-) -> tuple[list, str]:
+) -> list | None:
     """
     Retrieves the spectra of multiple astronomical objects from the SPARCL database and saves them as FITS files.
 
@@ -244,9 +244,8 @@ def retrieve_spectra(
     --------
     list
         A list of file paths (strings) where the FITS files for each spectrum were saved.
-
-    str
-        The data release from which the spectra were obtained. If no spectra are found, both values will be None.
+    None
+        If no spectra are found for the provided object IDs, the function returns None.
 
     Notes:
     ------
@@ -276,7 +275,7 @@ def retrieve_spectra(
     # If no spectra are found, notify the user and return None
     if len(spectra) == 0:
         print("No spectra found for object IDs:", object_ids)
-        return None, None
+        return None
 
     # List to store the paths of the saved FITS files
     filenames = []
@@ -359,7 +358,7 @@ def plot_spectrum(hdu, output_dir=tempfile.gettempdir(), file_name=None, open_pl
             header["RA"], header["DEC"], precision=2, shortform=False, prefix="J", decimal=False
         )
 
-    # Create the full file path for the plot image
+    # Create the full file path for the plot to be saved
     output_filename = os.path.join(output_dir, object_name + "." + plot_format)
 
     # Convert the string to an astropy unit
