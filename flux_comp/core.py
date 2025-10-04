@@ -1237,7 +1237,7 @@ class WaveFlux:
         uncertainty = self.data["Uncertainty"]
 
         # Identify zero values
-        mask = flux == 0
+        mask = flux == 0 | np.isfinite(flux)
 
         # If mask_first_n_values or mask_last_n_values are specified, mask the first and last N values
         if mask_first_n_values > 0:
