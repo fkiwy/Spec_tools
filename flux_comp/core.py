@@ -759,7 +759,7 @@ class SED:
                         marker="o",
                         ms=2,
                         lw=width,
-                        yerr=np.abs(uncertainties + delta),
+                        yerr=np.abs(uncertainties),
                         capsize=1.5,
                         capthick=0.3,
                         elinewidth=0.3,
